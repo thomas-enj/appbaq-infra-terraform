@@ -10,7 +10,7 @@ terraform {
 
 # Storage account for the application
 resource "azurerm_storage_account" "sa" {
-  name                            = "appbaqsa${replace(var.owner, "-", "")}tf"
+  name                            = "baqst${replace(var.owner, "-", "")}tf"
   resource_group_name             = var.resource_group_name
   location                        = var.location
   account_tier                    = "Standard"
