@@ -25,3 +25,13 @@ module "storage" {
   location            = data.azurerm_resource_group.rg.location
   tags                = local.tags
 }
+
+### Redis ###
+
+module "redis" {
+  source              = "./modules/redis"
+  owner               = var.owner
+  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg.location
+  tags                = local.tags
+}
