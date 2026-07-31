@@ -1,15 +1,15 @@
 output "redis_cache_name" {
-  value = azurerm_redis_cache.redis.name
+  value = azurerm_managed_redis.redis.name
 }
 
 output "redis_hostname" {
-  value = azurerm_redis_cache.redis.hostname
+  value = azurerm_managed_redis.redis.hostname
 }
 
 output "redis_ssl_port" {
-  value = azurerm_redis_cache.redis.ssl_port
+  value = azurerm_managed_redis.redis.default_database[0].port
 }
 
 output "redis_id" {
-  value = azurerm_redis_cache.redis.id
+  value = azurerm_managed_redis.redis.id
 }

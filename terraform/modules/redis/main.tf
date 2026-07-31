@@ -8,15 +8,15 @@ terraform {
   }
 }
 
-# Azure managed Redis instance for the application cache/session needs.
-resource "azurerm_redis_cache" "redis" {
-  name                 = "baqred${replace(var.owner, "-", "")}tf"
-  location             = var.location
-  resource_group_name  = var.resource_group_name
-  capacity             = 0
-  family               = "C"
-  sku_name             = "Basic"
-  minimum_tls_version  = "1.2"
-  non_ssl_port_enabled = false
-  tags                 = var.tags
+# Azure Managed Redis instance for caching and session management.
+resource "azurerm_managed_redis" "redis" {
+  name                  = "baqred${replace(var.owner, "-", "")}tf"
+  location              = var.location
+  resource_group_name   = var.resource_group_name
+  sku_name              = "Balanced_B0"
+  public_network_access = "Enabled"
+  tags                  = var.tags
+
+  # Required by the provider when creating a new Managed Redis instance.
+  default_database {}
 }
