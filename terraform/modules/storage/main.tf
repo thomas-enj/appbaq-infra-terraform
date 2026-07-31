@@ -3,7 +3,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 4.0"
+      version = "~> 5.0"
     }
   }
 }
@@ -25,6 +25,6 @@ resource "azurerm_storage_account" "sa" {
 # The backend uploads quiz result JSON blobs with names like results/{sessionId}.json.
 resource "azurerm_storage_container" "quiz_results" {
   name                  = "quiz-results"
-  storage_account_id    = azurerm_storage_account.sa.name
+  storage_account_id    = azurerm_storage_account.sa.id
   container_access_type = "private"
 }
