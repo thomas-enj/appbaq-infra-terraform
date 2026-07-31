@@ -4,8 +4,6 @@ repos:
     hooks:
       - id: terraform_fmt
       - id: terraform_tflint
-        args:
-          - --args=--recursive
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.24.2
