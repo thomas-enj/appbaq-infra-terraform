@@ -12,6 +12,7 @@ on:
         required: true
         type: choice
         options:
+          - apply
           - destroy
 
 permissions:
@@ -34,7 +35,7 @@ env:
 jobs:
   tflint:
     name: Terraform Linting
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -59,7 +60,7 @@ jobs:
 
   checkov:
     name: Security Scan (Checkov)
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -80,7 +81,7 @@ jobs:
 
   gitleaks:
     name: Secret Scan (Gitleaks)
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -96,7 +97,7 @@ jobs:
   tftest:
     name: Terraform Test
     needs: [tflint, checkov, gitleaks]
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -133,7 +134,7 @@ jobs:
   plan:
     name: Terraform Plan
     needs: tftest
-    if: github.actor != 'dependabot[bot]'
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -229,7 +230,7 @@ jobs:
   apply:
     name: Terraform Apply
     needs: plan
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.action == 'apply')
     runs-on: ubuntu-latest
     environment: tf-apply
     defaults:
