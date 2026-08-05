@@ -61,12 +61,11 @@ resource "azurerm_private_dns_zone" "postgresql" {
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "postgresql" {
-  name                  = "baq-pg-dns-link-${var.owner}"
-  resource_group_name   = var.resource_group_name
-  private_dns_zone_name = azurerm_private_dns_zone.postgresql.name
-  virtual_network_id    = azurerm_virtual_network.database.id
-  registration_enabled  = false
-  tags                  = var.tags
+  name                 = "baq-pg-dns-link-${var.owner}"
+  private_dns_zone_id  = azurerm_private_dns_zone.postgresql.id
+  virtual_network_id   = azurerm_virtual_network.database.id
+  registration_enabled = false
+  tags                 = var.tags
 }
 
 resource "azurerm_postgresql_flexible_server" "postgresql" {
