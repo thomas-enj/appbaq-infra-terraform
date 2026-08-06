@@ -65,8 +65,11 @@ module "keyvault" {
   location            = data.azurerm_resource_group.rg.location
   tags                = local.tags
 
-  postgresql_host           = module.database.postgresql_fqdn
-  postgresql_admin_username = module.database.postgresql_admin_username
-  postgresql_admin_password = module.database.postgresql_admin_password
-  postgresql_database_name  = module.database.postgresql_database_name
+  postgresql_host            = module.database.postgresql_fqdn
+  postgresql_admin_username  = module.database.postgresql_admin_username
+  postgresql_admin_password  = module.database.postgresql_admin_password
+  postgresql_database_name   = module.database.postgresql_database_name
+  redis_hostname             = module.redis.redis_hostname
+  storage_account_name       = module.storage.storage_account_name
+  storage_account_access_key = module.storage.storage_account_primary_access_key
 }

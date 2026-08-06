@@ -30,3 +30,16 @@ variable "postgresql_admin_password" {
 variable "postgresql_database_name" {
   type = string
 }
+
+variable "redis_hostname" {
+  type = string
+}
+
+variable "storage_account_name" {
+  type = string
+}
+
+variable "storage_account_access_key" {
+  type      = string
+  sensitive = true
+}
