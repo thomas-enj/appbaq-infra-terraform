@@ -13,6 +13,16 @@ data "azurerm_kubernetes_cluster" "shared" {
   resource_group_name = var.aks_resource_group_name
 }
 
+# Install the AKS Key Vault Secrets Provider so SecretProviderClass CRDs exist
+# before Helm applies manifests that depend on them.
+resource "azurerm_kubernetes_cluster_extension" "keyvault_secrets_provider" {
+  name       = "azurekeyvaultsecretsprovider"
+  cluster_id = data.azurerm_kubernetes_cluster.shared.id
+
+  extension_type = "microsoft.azurekeyvaultsecretsprovider"
+  release_train  = "stable"
+}
+
 # Allow kubelet identity from the shared AKS cluster to pull images from this ACR.
 resource "azurerm_role_assignment" "aks_acr_pull" {
   scope                = var.acr_id
