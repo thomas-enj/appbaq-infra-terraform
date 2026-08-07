@@ -107,6 +107,18 @@ resource "azurerm_key_vault_access_policy" "current_principal" {
   ]
 }
 
+resource "azurerm_key_vault_access_policy" "frontend_ci_readers" {
+  for_each = toset(var.frontend_ci_kv_reader_object_ids)
+
+  key_vault_id = azurerm_key_vault.kv.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = each.value
+
+  secret_permissions = [
+    "Get"
+  ]
+}
+
 resource "azurerm_key_vault_secret" "postgresql_host" {
   name         = "postgresql-host"
   value        = var.postgresql_host

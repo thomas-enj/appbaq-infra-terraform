@@ -31,6 +31,7 @@ env:
   OWNER: ${{ vars.TF_OWNER }}
   TF_VAR_owner: ${{ vars.TF_OWNER }}
   TF_VAR_resource_group_name: ${{ vars.TF_RGROUP }}
+  TF_VAR_frontend_ci_kv_reader_object_ids: ${{ secrets.TF_FRONTEND_CI_KV_READER_OBJECT_IDS || '[]' }}
 
 jobs:
   tflint:
