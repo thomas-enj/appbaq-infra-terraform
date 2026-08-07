@@ -43,3 +43,9 @@ variable "storage_account_access_key" {
   type      = string
   sensitive = true
 }
+
+variable "frontend_ci_kv_reader_object_ids" {
+  description = "Object IDs allowed to read Key Vault secrets from frontend CI pipeline."
+  type        = list(string)
+  default     = []
+}

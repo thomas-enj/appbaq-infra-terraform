@@ -55,6 +55,12 @@ variable "shared_aks_cluster_name" {
   default     = "aks-nonprod-prf2026"
 }
 
+variable "frontend_ci_kv_reader_object_ids" {
+  description = "Object IDs of frontend CI identities allowed to read Key Vault secrets"
+  type        = list(string)
+  default     = []
+}
+
 variable "database_vnet_cidr" {
   description = "CIDR block for the dedicated database virtual network"
   type        = string
