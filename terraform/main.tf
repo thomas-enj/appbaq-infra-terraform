@@ -39,6 +39,16 @@ module "container" {
   container_registry_admin_enabled = var.container_registry_admin_enabled
 }
 
+### AKS Integration ###
+
+module "aks_integration" {
+  source = "./modules/aks-integration"
+
+  aks_resource_group_name = var.shared_aks_resource_group_name
+  aks_cluster_name        = var.shared_aks_cluster_name
+  acr_id                  = module.container.container_registry_id
+}
+
 ### Redis ###
 
 module "redis" {
