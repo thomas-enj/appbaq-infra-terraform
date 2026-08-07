@@ -26,6 +26,29 @@ module "storage" {
   tags                = local.tags
 }
 
+### Container Registry ###
+
+module "container" {
+  source              = "./modules/container"
+  owner               = var.owner
+  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg.location
+  tags                = local.tags
+
+  container_registry_sku           = var.container_registry_sku
+  container_registry_admin_enabled = var.container_registry_admin_enabled
+}
+
+### AKS Integration ###
+
+module "aks_integration" {
+  source = "./modules/aks-integration"
+
+  aks_resource_group_name = var.shared_aks_resource_group_name
+  aks_cluster_name        = var.shared_aks_cluster_name
+  acr_id                  = module.container.container_registry_id
+}
+
 ### Redis ###
 
 module "redis" {
