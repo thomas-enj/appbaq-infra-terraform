@@ -31,6 +31,18 @@ variable "tags" {
   default     = {}
 }
 
+variable "container_registry_sku" {
+  description = "Azure Container Registry SKU"
+  type        = string
+  default     = "Basic"
+}
+
+variable "container_registry_admin_enabled" {
+  description = "Enable admin user on Azure Container Registry"
+  type        = bool
+  default     = false
+}
+
 variable "database_vnet_cidr" {
   description = "CIDR block for the dedicated database virtual network"
   type        = string
