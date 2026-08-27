@@ -138,26 +138,26 @@ jobs:
         run: |
           vnet_id=$(terraform state show -no-color \
             module.aks_integration.azurerm_virtual_network_peering.db_to_aks 2>/dev/null \
-            | sed -n 's/^[[:space:]]*remote_virtual_network_id[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')
+            | sed -n 's/^[[:space:]]*remote_virtual_network_id[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' || true)
 
           if [ -z "$vnet_id" ]; then
             subnet_id=$(az aks show \
               --resource-group "$AKS_RESOURCE_GROUP_NAME" \
               --name "$AKS_CLUSTER_NAME" \
               --query "agentPoolProfiles[?vnetSubnetId != null && vnetSubnetId != ''] | [0].vnetSubnetId" \
-              --output tsv)
+              --output tsv || true)
 
             if [ -z "$subnet_id" ]; then
               node_resource_group=$(az aks show \
                 --resource-group "$AKS_RESOURCE_GROUP_NAME" \
                 --name "$AKS_CLUSTER_NAME" \
                 --query nodeResourceGroup \
-                --output tsv)
+                --output tsv || true)
 
               vnet_id=$(az network vnet list \
                 --resource-group "$node_resource_group" \
                 --query "[0].id" \
-                --output tsv)
+                --output tsv || true)
             else
               vnet_id="${subnet_id%/subnets/*}"
             fi
@@ -167,7 +167,7 @@ jobs:
             subnet_id=$(az vmss list \
               --resource-group "$node_resource_group" \
               --query "[].virtualMachineProfile.networkProfile.networkInterfaceConfigurations[].ipConfigurations[].subnet.id | [0]" \
-              --output tsv)
+              --output tsv || true)
             if [ -n "$subnet_id" ]; then
               vnet_id="${subnet_id%/subnets/*}"
             fi
@@ -179,7 +179,7 @@ jobs:
               --resource-group "$AKS_RESOURCE_GROUP_NAME" \
               --name "$AKS_CLUSTER_NAME" \
               --query "{nodeResourceGroup:nodeResourceGroup,networkProfile:networkProfile}" \
-              --output json >&2
+              --output json >&2 || true
             exit 1
           fi
 
