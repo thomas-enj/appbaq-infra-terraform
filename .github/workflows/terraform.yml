@@ -102,7 +102,8 @@ jobs:
     if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
     outputs:
-      vnet_id: ${{ steps.discover.outputs.vnet_id }}
+      vnet_resource_group: ${{ steps.discover.outputs.vnet_resource_group }}
+      vnet_name: ${{ steps.discover.outputs.vnet_name }}
     defaults:
       run:
         working-directory: ./terraform
@@ -183,15 +184,22 @@ jobs:
             exit 1
           fi
 
-          echo "vnet_id=$vnet_id" >> "$GITHUB_OUTPUT"
+          vnet_resource_group=$(echo "$vnet_id" | sed -n 's#^/subscriptions/[^/]*/resourceGroups/\([^/]*\)/providers/Microsoft.Network/virtualNetworks/[^/]*$#\1#p')
+          vnet_name=$(echo "$vnet_id" | sed -n 's#^/subscriptions/[^/]*/resourceGroups/[^/]*/providers/Microsoft.Network/virtualNetworks/\([^/]*\)$#\1#p')
+
+          if [ -z "$vnet_resource_group" ] || [ -z "$vnet_name" ]; then
+            echo "Discovered value is not a valid Azure VNet resource ID: $vnet_id" >&2
+            exit 1
+          fi
+
+          echo "vnet_resource_group=$vnet_resource_group" >> "$GITHUB_OUTPUT"
+          echo "vnet_name=$vnet_name" >> "$GITHUB_OUTPUT"
 
   tftest:
     name: Terraform Test
     needs: [tflint, checkov, gitleaks, discover-aks-vnet]
     if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
-    env:
-      TF_VAR_shared_aks_vnet_id: ${{ needs.discover-aks-vnet.outputs.vnet_id }}
     defaults:
       run:
         working-directory: ./terraform
@@ -204,6 +212,10 @@ jobs:
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Set AKS VNet Terraform variable
+        shell: bash
+        run: echo "TF_VAR_shared_aks_vnet_id=/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/${{ needs.discover-aks-vnet.outputs.vnet_resource_group }}/providers/Microsoft.Network/virtualNetworks/${{ needs.discover-aks-vnet.outputs.vnet_name }}" >> "$GITHUB_ENV"
 
       - name: Terraform Init
         run: |
@@ -222,8 +234,6 @@ jobs:
     needs: [tftest, discover-aks-vnet]
     if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
-    env:
-      TF_VAR_shared_aks_vnet_id: ${{ needs.discover-aks-vnet.outputs.vnet_id }}
     defaults:
       run:
         working-directory: ./terraform
@@ -236,6 +246,10 @@ jobs:
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Set AKS VNet Terraform variable
+        shell: bash
+        run: echo "TF_VAR_shared_aks_vnet_id=/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/${{ needs.discover-aks-vnet.outputs.vnet_resource_group }}/providers/Microsoft.Network/virtualNetworks/${{ needs.discover-aks-vnet.outputs.vnet_name }}" >> "$GITHUB_ENV"
 
       - name: Az CLI login (OIDC)
         uses: azure/login@v3
@@ -321,8 +335,6 @@ jobs:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.action == 'apply')
     runs-on: ubuntu-latest
     environment: tf-apply
-    env:
-      TF_VAR_shared_aks_vnet_id: ${{ needs.discover-aks-vnet.outputs.vnet_id }}
     defaults:
         run:
             working-directory: ./terraform
@@ -335,6 +347,10 @@ jobs:
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Set AKS VNet Terraform variable
+        shell: bash
+        run: echo "TF_VAR_shared_aks_vnet_id=/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/${{ needs.discover-aks-vnet.outputs.vnet_resource_group }}/providers/Microsoft.Network/virtualNetworks/${{ needs.discover-aks-vnet.outputs.vnet_name }}" >> "$GITHUB_ENV"
 
       - name: Az CLI login (OIDC)
         uses: azure/login@v3
