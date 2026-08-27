@@ -35,6 +35,10 @@ variable "redis_hostname" {
   type = string
 }
 
+variable "redis_ssl_port" {
+  type = number
+}
+
 variable "storage_account_name" {
   type = string
 }

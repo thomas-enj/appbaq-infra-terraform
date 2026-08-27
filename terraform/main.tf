@@ -99,6 +99,7 @@ module "keyvault" {
   postgresql_admin_password        = module.database.postgresql_admin_password
   postgresql_database_name         = module.database.postgresql_database_name
   redis_hostname                   = module.redis.redis_hostname
+  redis_ssl_port                   = module.redis.redis_ssl_port
   storage_account_name             = module.storage.storage_account_name
   storage_account_access_key       = module.storage.storage_account_primary_access_key
   frontend_ci_kv_reader_object_ids = var.frontend_ci_kv_reader_object_ids
