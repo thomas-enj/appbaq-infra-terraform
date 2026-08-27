@@ -103,8 +103,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       vnet_id: ${{ steps.discover.outputs.vnet_id }}
+    defaults:
+      run:
+        working-directory: ./terraform
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
       - name: Az CLI login (OIDC)
         uses: azure/login@v3
         with:
@@ -112,27 +123,44 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${RGROUP}" \
+            -backend-config="storage_account_name=${SA_BACKEND}" \
+            -backend-config="container_name=tfstate-appbaq" \
+            -backend-config="key=${OWNER}.terraform.tfstate" \
+            -migrate-state
+
       - name: Read shared AKS VNet
         id: discover
         shell: bash
         run: |
-          subnet_id=$(az aks show \
-            --resource-group "$AKS_RESOURCE_GROUP_NAME" \
-            --name "$AKS_CLUSTER_NAME" \
-            --query "agentPoolProfiles[?vnetSubnetId != null && vnetSubnetId != ''] | [0].vnetSubnetId" \
-            --output tsv)
+          vnet_id=$(terraform state show -no-color \
+            module.aks_integration.azurerm_virtual_network_peering.db_to_aks 2>/dev/null \
+            | sed -n 's/^[[:space:]]*remote_virtual_network_id[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')
 
-          if [ -z "$subnet_id" ]; then
-            node_resource_group=$(az aks show \
+          if [ -z "$vnet_id" ]; then
+            subnet_id=$(az aks show \
               --resource-group "$AKS_RESOURCE_GROUP_NAME" \
               --name "$AKS_CLUSTER_NAME" \
-              --query nodeResourceGroup \
+              --query "agentPoolProfiles[?vnetSubnetId != null && vnetSubnetId != ''] | [0].vnetSubnetId" \
               --output tsv)
 
-            vnet_id=$(az network vnet list \
-              --resource-group "$node_resource_group" \
-              --query "[0].id" \
-              --output tsv)
+            if [ -z "$subnet_id" ]; then
+              node_resource_group=$(az aks show \
+                --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+                --name "$AKS_CLUSTER_NAME" \
+                --query nodeResourceGroup \
+                --output tsv)
+
+              vnet_id=$(az network vnet list \
+                --resource-group "$node_resource_group" \
+                --query "[0].id" \
+                --output tsv)
+            else
+              vnet_id="${subnet_id%/subnets/*}"
+            fi
           fi
 
           if [ -z "$vnet_id" ] && [ -n "$node_resource_group" ]; then
@@ -140,17 +168,9 @@ jobs:
               --resource-group "$node_resource_group" \
               --query "[].virtualMachineProfile.networkProfile.networkInterfaceConfigurations[].ipConfigurations[].subnet.id | [0]" \
               --output tsv)
-          fi
-
-          if [ -z "$vnet_id" ] && [ -n "$node_resource_group" ] && [ -z "$subnet_id" ]; then
-            subnet_id=$(az network nic list \
-              --resource-group "$node_resource_group" \
-              --query "[].ipConfigurations[].subnet.id | [0]" \
-              --output tsv)
-          fi
-
-          if [ -z "$vnet_id" ] && [ -n "$subnet_id" ]; then
-            vnet_id="${subnet_id%/subnets/*}"
+            if [ -n "$subnet_id" ]; then
+              vnet_id="${subnet_id%/subnets/*}"
+            fi
           fi
 
           if [ -z "$vnet_id" ]; then
