@@ -8,6 +8,16 @@ variable "aks_cluster_name" {
   type        = string
 }
 
+variable "shared_aks_vnet_id" {
+  description = "Full resource ID of the VNet used by the shared AKS cluster."
+  type        = string
+
+  validation {
+    condition     = can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft.Network/virtualNetworks/[^/]+$", var.shared_aks_vnet_id))
+    error_message = "shared_aks_vnet_id must be a full Azure virtual network resource ID."
+  }
+}
+
 variable "acr_id" {
   description = "Resource ID of the Azure Container Registry."
   type        = string

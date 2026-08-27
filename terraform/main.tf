@@ -46,6 +46,7 @@ module "aks_integration" {
 
   aks_resource_group_name = var.shared_aks_resource_group_name
   aks_cluster_name        = var.shared_aks_cluster_name
+  shared_aks_vnet_id      = var.shared_aks_vnet_id
   acr_id                  = module.container.container_registry_id
 
   database_vnet_id               = module.database.vnet_id

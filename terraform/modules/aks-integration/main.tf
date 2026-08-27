@@ -21,13 +21,12 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
 }
 
 locals {
-  # The cluster's own VNet isn't exposed directly by the data source, only the node pool's subnet ID
-  # (a full ARM resource ID: .../resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<subnet>).
-  # Parse it out instead of hardcoding, since the shared cluster's networking isn't managed by this repo.
-  aks_subnet_id_parts     = split("/", data.azurerm_kubernetes_cluster.shared.agent_pool_profile[0].vnet_subnet_id)
-  aks_vnet_resource_group = local.aks_subnet_id_parts[4]
-  aks_vnet_name           = local.aks_subnet_id_parts[8]
-  aks_vnet_id             = join("/", slice(local.aks_subnet_id_parts, 0, 9))
+  # The AKS data source does not expose a reliable VNet ID for this shared cluster.
+  # Parse the explicitly supplied VNet resource ID instead of hardcoding its name.
+  aks_vnet_id_parts       = split("/", var.shared_aks_vnet_id)
+  aks_vnet_resource_group = local.aks_vnet_id_parts[4]
+  aks_vnet_name           = local.aks_vnet_id_parts[8]
+  aks_vnet_id             = var.shared_aks_vnet_id
 }
 
 # Bidirectional peering so AKS pods can reach the database's private VNet (public network access is

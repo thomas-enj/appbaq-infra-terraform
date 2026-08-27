@@ -55,6 +55,11 @@ variable "shared_aks_cluster_name" {
   default     = "aks-nonprod-prf2026"
 }
 
+variable "shared_aks_vnet_id" {
+  description = "Full resource ID of the VNet used by the shared AKS cluster"
+  type        = string
+}
+
 variable "frontend_ci_kv_reader_object_ids" {
   description = "Object IDs of frontend CI identities allowed to read Key Vault secrets"
   type        = list(string)
