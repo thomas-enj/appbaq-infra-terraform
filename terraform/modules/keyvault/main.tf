@@ -209,6 +209,16 @@ resource "azurerm_key_vault_secret" "redis_hostname" {
   depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
+resource "azurerm_key_vault_secret" "redis_ssl_port" {
+  name         = "redis-ssl-port"
+  value        = tostring(var.redis_ssl_port)
+  key_vault_id = azurerm_key_vault.kv.id
+  content_type = "text/plain"
+  tags         = var.tags
+
+  depends_on = [azurerm_key_vault_access_policy.current_principal]
+}
+
 resource "azurerm_key_vault_secret" "redis_password" {
   name         = "redis-password"
   value        = random_password.redis_password.result
