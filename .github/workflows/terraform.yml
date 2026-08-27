@@ -122,7 +122,20 @@ jobs:
             --output tsv)
 
           if [ -z "$subnet_id" ]; then
-            echo "No AKS agent pool vnetSubnetId was returned; the shared cluster networking must be supplied explicitly." >&2
+            node_resource_group=$(az aks show \
+              --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+              --name "$AKS_CLUSTER_NAME" \
+              --query nodeResourceGroup \
+              --output tsv)
+
+            subnet_id=$(az network nic list \
+              --resource-group "$node_resource_group" \
+              --query "[?ipConfigurations[0].subnet.id != null].ipConfigurations[0].subnet.id | [0]" \
+              --output tsv)
+          fi
+
+          if [ -z "$subnet_id" ]; then
+            echo "Unable to discover the shared AKS VNet from agent pools or node NICs." >&2
             exit 1
           fi
 
