@@ -47,6 +47,11 @@ module "aks_integration" {
   aks_resource_group_name = var.shared_aks_resource_group_name
   aks_cluster_name        = var.shared_aks_cluster_name
   acr_id                  = module.container.container_registry_id
+
+  database_vnet_id               = module.database.vnet_id
+  database_vnet_name             = module.database.vnet_name
+  database_resource_group_name   = data.azurerm_resource_group.rg.name
+  postgresql_private_dns_zone_id = module.database.private_dns_zone_id
 }
 
 ### Redis ###
