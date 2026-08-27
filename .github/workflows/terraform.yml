@@ -145,8 +145,16 @@ jobs:
             subnet_id=$(az aks show \
               --resource-group "$AKS_RESOURCE_GROUP_NAME" \
               --name "$AKS_CLUSTER_NAME" \
-              --query "agentPoolProfiles[?vnetSubnetId != null && vnetSubnetId != ''] | [0].vnetSubnetId" \
+              --query "networkProfile.vnetSubnetId" \
               --output tsv || true)
+
+            if [ -z "$subnet_id" ]; then
+              subnet_id=$(az aks show \
+                --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+                --name "$AKS_CLUSTER_NAME" \
+              --query "agentPoolProfiles[?vnetSubnetId != null && vnetSubnetId != ''] | [0].vnetSubnetId" \
+                --output tsv || true)
+            fi
 
             if [ -z "$subnet_id" ]; then
               node_resource_group=$(az aks show \
