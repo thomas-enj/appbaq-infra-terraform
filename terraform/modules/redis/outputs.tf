@@ -10,6 +10,11 @@ output "redis_ssl_port" {
   value = azurerm_managed_redis.redis.default_database[0].port
 }
 
+output "redis_primary_access_key" {
+  value     = azurerm_managed_redis.redis.default_database[0].primary_access_key
+  sensitive = true
+}
+
 output "redis_id" {
   value = azurerm_managed_redis.redis.id
 }

@@ -18,5 +18,7 @@ resource "azurerm_managed_redis" "redis" {
   tags                  = var.tags
 
   # Required by the provider when creating a new Managed Redis instance.
-  default_database {}
+  default_database {
+    access_keys_authentication_enabled = true
+  }
 }

@@ -35,12 +35,6 @@ resource "random_password" "backend_api_key" {
   override_special = "!@#%*()-_=+"
 }
 
-resource "random_password" "redis_password" {
-  length           = 36
-  special          = true
-  override_special = "!@#%*()-_=+"
-}
-
 data "azurerm_storage_account_sas" "backend_blob_sas" {
   connection_string = "DefaultEndpointsProtocol=https;AccountName=${var.storage_account_name};AccountKey=${var.storage_account_access_key};EndpointSuffix=core.windows.net"
   https_only        = true
@@ -221,7 +215,7 @@ resource "azurerm_key_vault_secret" "redis_ssl_port" {
 
 resource "azurerm_key_vault_secret" "redis_password" {
   name         = "redis-password"
-  value        = random_password.redis_password.result
+  value        = var.redis_password
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags

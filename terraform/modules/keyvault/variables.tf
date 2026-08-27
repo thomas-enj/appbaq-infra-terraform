@@ -39,6 +39,11 @@ variable "redis_ssl_port" {
   type = number
 }
 
+variable "redis_password" {
+  type      = string
+  sensitive = true
+}
+
 variable "storage_account_name" {
   type = string
 }
