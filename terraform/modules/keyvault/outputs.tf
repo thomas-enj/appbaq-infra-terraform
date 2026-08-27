@@ -26,6 +26,7 @@ output "backend_secret_ids" {
     spring_datasource_username = azurerm_key_vault_secret.spring_datasource_username.id
     spring_datasource_password = azurerm_key_vault_secret.spring_datasource_password.id
     redis_hostname             = azurerm_key_vault_secret.redis_hostname.id
+    redis_username             = azurerm_key_vault_secret.redis_username.id
     redis_ssl_port             = azurerm_key_vault_secret.redis_ssl_port.id
     redis_password             = azurerm_key_vault_secret.redis_password.id
     backend_api_key            = azurerm_key_vault_secret.backend_api_key.id
