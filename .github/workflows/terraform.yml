@@ -99,6 +99,7 @@ jobs:
 
   discover-aks-vnet:
     name: Discover shared AKS VNet
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
     outputs:
       vnet_id: ${{ steps.discover.outputs.vnet_id }}
@@ -128,18 +129,40 @@ jobs:
               --query nodeResourceGroup \
               --output tsv)
 
-            subnet_id=$(az network nic list \
+            vnet_id=$(az network vnet list \
               --resource-group "$node_resource_group" \
-              --query "[?ipConfigurations[0].subnet.id != null].ipConfigurations[0].subnet.id | [0]" \
+              --query "[0].id" \
               --output tsv)
           fi
 
-          if [ -z "$subnet_id" ]; then
-            echo "Unable to discover the shared AKS VNet from agent pools or node NICs." >&2
+          if [ -z "$vnet_id" ] && [ -n "$node_resource_group" ]; then
+            subnet_id=$(az vmss list \
+              --resource-group "$node_resource_group" \
+              --query "[].virtualMachineProfile.networkProfile.networkInterfaceConfigurations[].ipConfigurations[].subnet.id | [0]" \
+              --output tsv)
+          fi
+
+          if [ -z "$vnet_id" ] && [ -n "$node_resource_group" ] && [ -z "$subnet_id" ]; then
+            subnet_id=$(az network nic list \
+              --resource-group "$node_resource_group" \
+              --query "[].ipConfigurations[].subnet.id | [0]" \
+              --output tsv)
+          fi
+
+          if [ -z "$vnet_id" ] && [ -n "$subnet_id" ]; then
+            vnet_id="${subnet_id%/subnets/*}"
+          fi
+
+          if [ -z "$vnet_id" ]; then
+            echo "Unable to discover the shared AKS VNet from agent pools, the node resource group, or node NICs." >&2
+            az aks show \
+              --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+              --name "$AKS_CLUSTER_NAME" \
+              --query "{nodeResourceGroup:nodeResourceGroup,networkProfile:networkProfile}" \
+              --output json >&2
             exit 1
           fi
 
-          vnet_id="${subnet_id%/subnets/*}"
           echo "vnet_id=$vnet_id" >> "$GITHUB_OUTPUT"
 
   tftest:
@@ -313,12 +336,9 @@ jobs:
         run: terraform apply -auto-approve
 
   destroy:
-    needs: discover-aks-vnet
     if: inputs.action == 'destroy'
     runs-on: ubuntu-latest
     environment: tf-destroy
-    env:
-      TF_VAR_shared_aks_vnet_id: ${{ needs.discover-aks-vnet.outputs.vnet_id }}
     defaults:
         run:
             working-directory: ./terraform
@@ -348,6 +368,42 @@ jobs:
             -backend-config="key=${OWNER}.terraform.tfstate" \
             -migrate-state
 
+      - name: Restore AKS VNet from state
+        shell: bash
+        run: |
+          vnet_id=$(terraform state show -no-color \
+            module.aks_integration.azurerm_virtual_network_peering.db_to_aks 2>/dev/null \
+            | sed -n 's/^[[:space:]]*remote_virtual_network_id[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')
+
+          if [ -z "$vnet_id" ]; then
+            echo "The AKS VNet ID is not available in state; discovering it from Azure."
+            subnet_id=$(az aks show \
+              --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+              --name "$AKS_CLUSTER_NAME" \
+              --query "agentPoolProfiles[?vnetSubnetId != null && vnetSubnetId != ''] | [0].vnetSubnetId" \
+              --output tsv)
+
+            if [ -z "$subnet_id" ]; then
+              node_resource_group=$(az aks show \
+                --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+                --name "$AKS_CLUSTER_NAME" \
+                --query nodeResourceGroup \
+                --output tsv)
+              vnet_id=$(az network vnet list \
+                --resource-group "$node_resource_group" \
+                --query "[0].id" \
+                --output tsv)
+            else
+              vnet_id="${subnet_id%/subnets/*}"
+            fi
+          fi
+
+          if [ -z "$vnet_id" ]; then
+            echo "Unable to determine the AKS VNet ID required to load the Terraform configuration." >&2
+            exit 1
+          fi
+
+          echo "TF_VAR_shared_aks_vnet_id=$vnet_id" >> "$GITHUB_ENV"
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
