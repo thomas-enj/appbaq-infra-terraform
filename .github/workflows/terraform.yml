@@ -31,6 +31,8 @@ env:
   OWNER: ${{ vars.TF_OWNER }}
   TF_VAR_owner: ${{ vars.TF_OWNER }}
   TF_VAR_resource_group_name: ${{ vars.TF_RGROUP }}
+  AKS_RESOURCE_GROUP_NAME: ${{ vars.TF_SHARED_AKS_RESOURCE_GROUP_NAME || 'rg-shared-prf2026' }}
+  AKS_CLUSTER_NAME: ${{ vars.TF_SHARED_AKS_CLUSTER_NAME || 'aks-nonprod-prf2026' }}
   TF_VAR_frontend_ci_kv_reader_object_ids: ${{ secrets.TF_FRONTEND_CI_KV_READER_OBJECT_IDS || '[]' }}
 
 jobs:
@@ -95,11 +97,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  tftest:
-    name: Terraform Test
-    needs: [tflint, checkov, gitleaks]
+  discover-aks-vnet:
+    name: Discover shared AKS VNet
     if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
+    outputs:
+      vnet_resource_group: ${{ steps.discover.outputs.vnet_resource_group }}
+      vnet_name: ${{ steps.discover.outputs.vnet_name }}
     defaults:
       run:
         working-directory: ./terraform
@@ -129,12 +133,71 @@ jobs:
             -backend-config="key=${OWNER}.terraform.tfstate" \
             -migrate-state
 
-      - name: Terraform Test
-        run: terraform test
-  
-  plan:
-    name: Terraform Plan
-    needs: tftest
+      - name: Read shared AKS VNet
+        id: discover
+        shell: bash
+        run: |
+          vnet_id=$(terraform state show -no-color \
+            module.aks_integration.azurerm_virtual_network_peering.db_to_aks 2>/dev/null \
+            | sed -n 's/^[[:space:]]*remote_virtual_network_id[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' || true)
+
+          if [ -z "$vnet_id" ]; then
+            subnet_id=$(az aks show \
+              --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+              --name "$AKS_CLUSTER_NAME" \
+              --query "agentPoolProfiles[?vnetSubnetId != null && vnetSubnetId != ''] | [0].vnetSubnetId" \
+              --output tsv || true)
+
+            if [ -z "$subnet_id" ]; then
+              node_resource_group=$(az aks show \
+                --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+                --name "$AKS_CLUSTER_NAME" \
+                --query nodeResourceGroup \
+                --output tsv || true)
+
+              vnet_id=$(az network vnet list \
+                --resource-group "$node_resource_group" \
+                --query "[0].id" \
+                --output tsv || true)
+            else
+              vnet_id="${subnet_id%/subnets/*}"
+            fi
+          fi
+
+          if [ -z "$vnet_id" ] && [ -n "$node_resource_group" ]; then
+            subnet_id=$(az vmss list \
+              --resource-group "$node_resource_group" \
+              --query "[].virtualMachineProfile.networkProfile.networkInterfaceConfigurations[].ipConfigurations[].subnet.id | [0]" \
+              --output tsv || true)
+            if [ -n "$subnet_id" ]; then
+              vnet_id="${subnet_id%/subnets/*}"
+            fi
+          fi
+
+          if [ -z "$vnet_id" ]; then
+            echo "Unable to discover the shared AKS VNet from agent pools, the node resource group, or node NICs." >&2
+            az aks show \
+              --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+              --name "$AKS_CLUSTER_NAME" \
+              --query "{nodeResourceGroup:nodeResourceGroup,networkProfile:networkProfile}" \
+              --output json >&2 || true
+            exit 1
+          fi
+
+          vnet_resource_group=$(echo "$vnet_id" | sed -n 's#^/subscriptions/[^/]*/resourceGroups/\([^/]*\)/providers/Microsoft.Network/virtualNetworks/[^/]*$#\1#p')
+          vnet_name=$(echo "$vnet_id" | sed -n 's#^/subscriptions/[^/]*/resourceGroups/[^/]*/providers/Microsoft.Network/virtualNetworks/\([^/]*\)$#\1#p')
+
+          if [ -z "$vnet_resource_group" ] || [ -z "$vnet_name" ]; then
+            echo "Discovered value is not a valid Azure VNet resource ID: $vnet_id" >&2
+            exit 1
+          fi
+
+          echo "vnet_resource_group=$vnet_resource_group" >> "$GITHUB_OUTPUT"
+          echo "vnet_name=$vnet_name" >> "$GITHUB_OUTPUT"
+
+  tftest:
+    name: Terraform Test
+    needs: [tflint, checkov, gitleaks, discover-aks-vnet]
     if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
     runs-on: ubuntu-latest
     defaults:
@@ -149,6 +212,44 @@ jobs:
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Set AKS VNet Terraform variable
+        shell: bash
+        run: echo "TF_VAR_shared_aks_vnet_id=/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/${{ needs.discover-aks-vnet.outputs.vnet_resource_group }}/providers/Microsoft.Network/virtualNetworks/${{ needs.discover-aks-vnet.outputs.vnet_name }}" >> "$GITHUB_ENV"
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${RGROUP}" \
+            -backend-config="storage_account_name=${SA_BACKEND}" \
+            -backend-config="container_name=tfstate-appbaq" \
+            -backend-config="key=${OWNER}.terraform.tfstate" \
+            -migrate-state
+
+      - name: Terraform Test
+        run: terraform test
+  
+  plan:
+    name: Terraform Plan
+    needs: [tftest, discover-aks-vnet]
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'workflow_dispatch' || inputs.action != 'destroy')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Set AKS VNet Terraform variable
+        shell: bash
+        run: echo "TF_VAR_shared_aks_vnet_id=/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/${{ needs.discover-aks-vnet.outputs.vnet_resource_group }}/providers/Microsoft.Network/virtualNetworks/${{ needs.discover-aks-vnet.outputs.vnet_name }}" >> "$GITHUB_ENV"
 
       - name: Az CLI login (OIDC)
         uses: azure/login@v3
@@ -230,7 +331,7 @@ jobs:
         run: exit 1
   apply:
     name: Terraform Apply
-    needs: plan
+    needs: [plan, discover-aks-vnet]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.action == 'apply')
     runs-on: ubuntu-latest
     environment: tf-apply
@@ -246,6 +347,10 @@ jobs:
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Set AKS VNet Terraform variable
+        shell: bash
+        run: echo "TF_VAR_shared_aks_vnet_id=/subscriptions/$ARM_SUBSCRIPTION_ID/resourceGroups/${{ needs.discover-aks-vnet.outputs.vnet_resource_group }}/providers/Microsoft.Network/virtualNetworks/${{ needs.discover-aks-vnet.outputs.vnet_name }}" >> "$GITHUB_ENV"
 
       - name: Az CLI login (OIDC)
         uses: azure/login@v3
@@ -299,6 +404,42 @@ jobs:
             -backend-config="key=${OWNER}.terraform.tfstate" \
             -migrate-state
 
+      - name: Restore AKS VNet from state
+        shell: bash
+        run: |
+          vnet_id=$(terraform state show -no-color \
+            module.aks_integration.azurerm_virtual_network_peering.db_to_aks 2>/dev/null \
+            | sed -n 's/^[[:space:]]*remote_virtual_network_id[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p')
+
+          if [ -z "$vnet_id" ]; then
+            echo "The AKS VNet ID is not available in state; discovering it from Azure."
+            subnet_id=$(az aks show \
+              --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+              --name "$AKS_CLUSTER_NAME" \
+              --query "agentPoolProfiles[?vnetSubnetId != null && vnetSubnetId != ''] | [0].vnetSubnetId" \
+              --output tsv)
+
+            if [ -z "$subnet_id" ]; then
+              node_resource_group=$(az aks show \
+                --resource-group "$AKS_RESOURCE_GROUP_NAME" \
+                --name "$AKS_CLUSTER_NAME" \
+                --query nodeResourceGroup \
+                --output tsv)
+              vnet_id=$(az network vnet list \
+                --resource-group "$node_resource_group" \
+                --query "[0].id" \
+                --output tsv)
+            else
+              vnet_id="${subnet_id%/subnets/*}"
+            fi
+          fi
+
+          if [ -z "$vnet_id" ]; then
+            echo "Unable to determine the AKS VNet ID required to load the Terraform configuration." >&2
+            exit 1
+          fi
+
+          echo "TF_VAR_shared_aks_vnet_id=$vnet_id" >> "$GITHUB_ENV"
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
