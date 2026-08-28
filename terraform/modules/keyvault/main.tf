@@ -16,18 +16,15 @@ locals {
   normalized_owner = replace(var.owner, "-", "")
   kv_owner_token   = substr(local.normalized_owner, 0, min(length(local.normalized_owner), 12))
 
+  # Deterministic suffix: the name must stay stable so a soft-deleted vault can be recovered.
+  kv_unique_token = substr(sha256("${var.resource_group_name}-${var.owner}"), 0, 4)
+  key_vault_name  = "baqkv${local.kv_owner_token}${local.kv_unique_token}"
+
   postgresql_connection_string = "Host=${var.postgresql_host};Port=5432;Database=${var.postgresql_database_name};Username=${var.postgresql_admin_username};Password=${var.postgresql_admin_password};Ssl Mode=Require;Trust Server Certificate=true;"
   spring_datasource_url        = "jdbc:postgresql://${var.postgresql_host}:5432/${var.postgresql_database_name}?sslmode=require"
 }
 
 data "azurerm_client_config" "current" {}
-
-resource "random_string" "suffix" {
-  length  = 4
-  upper   = false
-  special = false
-  numeric = true
-}
 
 resource "random_password" "backend_api_key" {
   length           = 48
@@ -71,7 +68,7 @@ data "azurerm_storage_account_sas" "backend_blob_sas" {
 }
 
 resource "azurerm_key_vault" "kv" {
-  name                          = "baqkv${local.kv_owner_token}${random_string.suffix.result}"
+  name                          = local.key_vault_name
   resource_group_name           = var.resource_group_name
   location                      = var.location
   tenant_id                     = data.azurerm_client_config.current.tenant_id
@@ -82,35 +79,37 @@ resource "azurerm_key_vault" "kv" {
   soft_delete_retention_days    = 7
   public_network_access_enabled = true
   tags                          = var.tags
-}
 
-resource "azurerm_key_vault_access_policy" "current_principal" {
-  key_vault_id = azurerm_key_vault.kv.id
-  tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = data.azurerm_client_config.current.object_id
+  # Inline policies so a recovered vault (which restores its previous policies) is reconciled
+  # instead of failing with a "resource already exists" import error.
+  access_policy {
+    tenant_id = data.azurerm_client_config.current.tenant_id
+    object_id = data.azurerm_client_config.current.object_id
 
-  secret_permissions = [
-    "Get",
-    "List",
-    "Set",
-    "Delete",
-    "Recover",
-    "Backup",
-    "Restore",
-    "Purge"
-  ]
-}
+    secret_permissions = [
+      "Get",
+      "List",
+      "Set",
+      "Delete",
+      "Recover",
+      "Backup",
+      "Restore",
+      "Purge"
+    ]
+  }
 
-resource "azurerm_key_vault_access_policy" "frontend_ci_readers" {
-  for_each = toset(var.frontend_ci_kv_reader_object_ids)
+  dynamic "access_policy" {
+    for_each = toset(var.frontend_ci_kv_reader_object_ids)
 
-  key_vault_id = azurerm_key_vault.kv.id
-  tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = each.value
+    content {
+      tenant_id = data.azurerm_client_config.current.tenant_id
+      object_id = access_policy.value
 
-  secret_permissions = [
-    "Get"
-  ]
+      secret_permissions = [
+        "Get"
+      ]
+    }
+  }
 }
 
 resource "azurerm_key_vault_secret" "postgresql_host" {
@@ -119,8 +118,6 @@ resource "azurerm_key_vault_secret" "postgresql_host" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "postgresql_admin_username" {
@@ -129,8 +126,6 @@ resource "azurerm_key_vault_secret" "postgresql_admin_username" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "postgresql_admin_password" {
@@ -139,8 +134,6 @@ resource "azurerm_key_vault_secret" "postgresql_admin_password" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "postgresql_database_name" {
@@ -149,8 +142,6 @@ resource "azurerm_key_vault_secret" "postgresql_database_name" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "postgresql_connection_string" {
@@ -159,8 +150,6 @@ resource "azurerm_key_vault_secret" "postgresql_connection_string" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "spring_datasource_url" {
@@ -169,8 +158,6 @@ resource "azurerm_key_vault_secret" "spring_datasource_url" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "spring_datasource_username" {
@@ -179,8 +166,6 @@ resource "azurerm_key_vault_secret" "spring_datasource_username" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "spring_datasource_password" {
@@ -189,8 +174,6 @@ resource "azurerm_key_vault_secret" "spring_datasource_password" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "redis_hostname" {
@@ -199,8 +182,6 @@ resource "azurerm_key_vault_secret" "redis_hostname" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "redis_username" {
@@ -209,8 +190,6 @@ resource "azurerm_key_vault_secret" "redis_username" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "redis_ssl_port" {
@@ -219,8 +198,6 @@ resource "azurerm_key_vault_secret" "redis_ssl_port" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "redis_password" {
@@ -229,8 +206,6 @@ resource "azurerm_key_vault_secret" "redis_password" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "backend_api_key" {
@@ -239,8 +214,6 @@ resource "azurerm_key_vault_secret" "backend_api_key" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "storage_account_name" {
@@ -249,8 +222,6 @@ resource "azurerm_key_vault_secret" "storage_account_name" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
 
 resource "azurerm_key_vault_secret" "storage_sas_token" {
@@ -259,6 +230,4 @@ resource "azurerm_key_vault_secret" "storage_sas_token" {
   key_vault_id = azurerm_key_vault.kv.id
   content_type = "text/plain"
   tags         = var.tags
-
-  depends_on = [azurerm_key_vault_access_policy.current_principal]
 }
