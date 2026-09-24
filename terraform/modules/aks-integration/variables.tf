@@ -1,3 +1,8 @@
+variable "owner" {
+  description = "Owner/developer namespace used to keep this environment's peering and DNS link names unique on the shared AKS VNet."
+  type        = string
+}
+
 variable "aks_resource_group_name" {
   description = "Resource group name of the existing AKS cluster."
   type        = string

@@ -44,6 +44,7 @@ module "container" {
 module "aks_integration" {
   source = "./modules/aks-integration"
 
+  owner                   = var.owner
   aks_resource_group_name = var.shared_aks_resource_group_name
   aks_cluster_name        = var.shared_aks_cluster_name
   shared_aks_vnet_id      = var.shared_aks_vnet_id
