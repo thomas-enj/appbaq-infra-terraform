@@ -32,15 +32,17 @@ locals {
 # Bidirectional peering so AKS pods can reach the database's private VNet (public network access is
 # disabled on the PostgreSQL Flexible Server, see modules/database/main.tf).
 resource "azurerm_virtual_network_peering" "db_to_aks" {
-  name                         = "peer-db-to-aks"
+  name                         = "peer-db-to-aks-${var.owner}"
   resource_group_name          = var.database_resource_group_name
   virtual_network_name         = var.database_vnet_name
   remote_virtual_network_id    = local.aks_vnet_id
   allow_virtual_network_access = true
 }
 
+# Named per owner: this VNet is shared across developer environments, so a fixed name would collide
+# with (or get orphaned by) other owners' peerings when their DB VNets are destroyed and recreated.
 resource "azurerm_virtual_network_peering" "aks_to_db" {
-  name                         = "peer-aks-to-db"
+  name                         = "peer-aks-to-db-${var.owner}"
   resource_group_name          = local.aks_vnet_resource_group
   virtual_network_name         = local.aks_vnet_name
   remote_virtual_network_id    = var.database_vnet_id
@@ -50,7 +52,7 @@ resource "azurerm_virtual_network_peering" "aks_to_db" {
 # The PostgreSQL private DNS zone is only linked to the database VNet by default -- without this,
 # AKS pods can route to the server over the peering above but still can't resolve its private FQDN.
 resource "azurerm_private_dns_zone_virtual_network_link" "postgresql_aks" {
-  name                 = "baq-pg-dns-link-aks"
+  name                 = "baq-pg-dns-link-aks-${var.owner}"
   private_dns_zone_id  = var.postgresql_private_dns_zone_id
   virtual_network_id   = local.aks_vnet_id
   registration_enabled = false
