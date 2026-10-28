@@ -31,6 +31,41 @@ variable "tags" {
   default     = {}
 }
 
+variable "container_registry_sku" {
+  description = "Azure Container Registry SKU"
+  type        = string
+  default     = "Basic"
+}
+
+variable "container_registry_admin_enabled" {
+  description = "Enable admin user on Azure Container Registry"
+  type        = bool
+  default     = false
+}
+
+variable "shared_aks_resource_group_name" {
+  description = "Resource group name of the shared AKS cluster to integrate with ACR"
+  type        = string
+  default     = "rg-shared-prf2026"
+}
+
+variable "shared_aks_cluster_name" {
+  description = "Name of the shared AKS cluster to integrate with ACR"
+  type        = string
+  default     = "aks-nonprod-prf2026"
+}
+
+variable "shared_aks_vnet_id" {
+  description = "Full resource ID of the VNet used by the shared AKS cluster"
+  type        = string
+}
+
+variable "frontend_ci_kv_reader_object_ids" {
+  description = "Object IDs of frontend CI identities allowed to read Key Vault secrets"
+  type        = list(string)
+  default     = []
+}
+
 variable "database_vnet_cidr" {
   description = "CIDR block for the dedicated database virtual network"
   type        = string
